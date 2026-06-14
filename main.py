@@ -1,13 +1,8 @@
 from ultralytics import YOLO
 import cv2
 
-# Load the YOLOv8n Nano model (downloads automatically on first run)
 model = YOLO("yolov8n.pt")
 
-# Maps YOLO object labels to prosthetic grip types
-# Note: some objects get unexpected labels (e.g, bottlles detected as
-# vases)
-# so both are mapped to the same grip
 GRIP_MAP = {
     "bottle": "power",
     "vase": "power",
@@ -23,12 +18,19 @@ GRIP_MAP = {
     "pen": "pinch",
 }
 
-# Minimum confidence required before acting on a dection
 CONFIDENCE_THRESHOLD = 0.60
 
-def recommend_grip(image_path):
-    img = cv2.imread(image_path)
-    results = model(img)
+# 0 means use the first available camera (your laptop webcam)
+cap = cv2.VideoCapture(0)
+
+while True:
+    # Read one frame from the webcam
+    ret, frame = cap.read()
+    if not ret:
+        print("Camera not found")
+        break
+
+    results = model(frame)
 
     for result in results:
         for box in result.boxes:
@@ -38,10 +40,14 @@ def recommend_grip(image_path):
             if confidence >= CONFIDENCE_THRESHOLD:
                 grip = GRIP_MAP.get(label, None)
                 if grip:
-                    print(f"Detected: {label} ({confidence:.0%} confidence)")
-                    print(f"Recommended grip: {grip}")
-                    return
-                    
-    print("No confident detection — try repositioning the object")
+                    print(f"Detected: {label} ({confidence:.0%}) → {grip} grip")
 
-recommend_grip("test.jpg")
+    # Show the camera feed in a window
+    cv2.imshow("Prosthetic Camera Feed", frame)
+
+    # Press Q to quit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
