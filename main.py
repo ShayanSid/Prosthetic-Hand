@@ -1,8 +1,15 @@
 from ultralytics import YOLO
+from picamera2 import Picamera2
+import time
 import cv2
+import numpy as np
 
+# Load the YOLOv8 Nano model
 model = YOLO("yolov8n.pt")
 
+# Maps YOLO object labels to prosthetic grip types
+# Note: some objects get unexpected labels (e.g. bottles detected as vases)
+# so both are mapped to the same grip
 GRIP_MAP = {
     "bottle": "power",
     "vase": "power",
@@ -18,36 +25,37 @@ GRIP_MAP = {
     "pen": "pinch",
 }
 
+# Minimum confidence required before acting on a detection
 CONFIDENCE_THRESHOLD = 0.60
 
-# 0 means use the first available camera (your laptop webcam)
-cap = cv2.VideoCapture(0)
+# Set up Pi Camera
+picam2 = Picamera2()
+config = picam2.create_preview_configuration(
+    main={"size": (640, 480), "format": "RGB888"}
+)
+picam2.configure(config)
+picam2.start()
+
+print("Camera started — point at an object")
 
 while True:
-    # Read one frame from the webcam
-    ret, frame = cap.read()
-    if not ret:
-        print("Camera not found")
-        break
+    # Grab frame from Pi Camera
+    start = time.time()
+    frame = picam2.capture_array()
 
-    results = model(frame)
+    results = model(frame, verbose=False)
 
     for result in results:
         for box in result.boxes:
             label = result.names[int(box.cls)]
             confidence = float(box.conf)
+            print(f"Saw: {label} ({confidence:.0%})")
+
 
             if confidence >= CONFIDENCE_THRESHOLD:
                 grip = GRIP_MAP.get(label, None)
                 if grip:
                     print(f"Detected: {label} ({confidence:.0%}) → {grip} grip")
 
-    # Show the camera feed in a window
-    cv2.imshow("Prosthetic Camera Feed", frame)
-
-    # Press Q to quit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+    print(f"Frame time: {(time.time()-start)*1000:.0f}ms")
+picam2.stop()
